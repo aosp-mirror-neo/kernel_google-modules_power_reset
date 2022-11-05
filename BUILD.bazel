@@ -22,11 +22,11 @@ kernel_module(
         "exynos-reboot.ko",
     ],
     kernel_build = "//gs/google-modules/soc-modules:slider",
-    kernel_module_deps = [
-        "//gs/google-modules/bms:bms.slider",
-        "//gs/google-modules/soc-modules:gs101_soc",
-    ],
     visibility = [
         "//gs/google-modules/soc-modules:__pkg__",
+    ],
+    deps = [
+        "//gs/google-modules/bms:bms.slider",
+        "//gs/google-modules/soc-modules:gs101_soc",
     ],
 )
