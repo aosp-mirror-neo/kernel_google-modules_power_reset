@@ -9,9 +9,9 @@
  */
 
 #include <linux/delay.h>
+#include <linux/gpio/consumer.h>
 #include <linux/io.h>
 #include <linux/of.h>
-#include <linux/of_gpio.h>
 #include <linux/input.h>
 #include <linux/module.h>
 #include <linux/notifier.h>
@@ -28,6 +28,7 @@
 #include <soc/google/debug-snapshot.h>
 #include "../../bms/google_bms.h"
 
+struct gpio_desc *power_gpio;
 #define EXYNOS_PMU_SYSIP_DAT0		(0x0810)
 
 #define BMS_RSBM_VALID			BIT(31)
@@ -59,35 +60,15 @@ enum pon_reboot_mode {
 static void exynos_power_off(void)
 {
 	u32 poweroff_try = 0;
-	int power_gpio = -1;
-	unsigned int keycode = 0;
-	struct device_node *np, *pp;
 
-	np = of_find_node_by_path("/gpio_keys");
-	if (!np)
-		return;
-
-	for_each_child_of_node(np, pp) {
-		if (!of_find_property(pp, "gpios", NULL))
-			continue;
-		of_property_read_u32(pp, "linux,code", &keycode);
-		if (keycode == KEY_POWER) {
-			pr_info("%s: <%u>\n", __func__, keycode);
-			power_gpio = of_get_gpio(pp, 0);
-			break;
-		}
-	}
-
-	of_node_put(np);
-
-	if (!gpio_is_valid(power_gpio)) {
+	if (IS_ERR_OR_NULL(power_gpio)) {
 		pr_err("Couldn't find power key node\n");
 		return;
 	}
 
 	while (1) {
 		/* wait for power button release */
-		if (gpio_get_value(power_gpio)) {
+		if (gpiod_get_raw_value(power_gpio)) {
 #if IS_ENABLED(CONFIG_GS_ACPM)
 			exynos_acpm_reboot();
 #endif
@@ -224,10 +205,11 @@ static struct notifier_block exynos_restart_nb = {
 static int exynos_reboot_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *np = pdev->dev.of_node;
+	struct device_node *np = pdev->dev.of_node, *pp;
 	struct device_node *syscon_np;
 	struct resource res;
 	int err;
+	unsigned int keycode = 0;
 
 	pmureg = syscon_regmap_lookup_by_phandle(np, "syscon");
 	if (IS_ERR(pmureg)) {
@@ -278,6 +260,29 @@ static int exynos_reboot_probe(struct platform_device *pdev)
 
 	force_warm_reboot_on_thermal_shutdown = of_property_read_bool(np,
 						"force-warm-reboot-on-thermal-shutdown");
+
+	np = of_find_node_by_path("/gpio_keys");
+	if (!np)
+		return -EINVAL;
+	for_each_child_of_node(np, pp) {
+		if (!of_find_property(pp, "gpios", NULL))
+			continue;
+		of_property_read_u32(pp, "linux,code", &keycode);
+
+		if (keycode == KEY_POWER) {
+			power_gpio = devm_fwnode_gpiod_get_index(dev, of_fwnode_handle(pp),
+								 NULL, 0, GPIOD_IN |
+								 GPIOD_FLAGS_BIT_NONEXCLUSIVE,
+								 NULL);
+			if (IS_ERR(power_gpio)) {
+				dev_err(dev, "failed to get KEY_POWER gpio (%ld)\n",
+					 PTR_ERR(power_gpio));
+				return PTR_ERR(power_gpio);
+			}
+			break;
+		}
+	}
+	of_node_put(np);
 
 	err = register_reboot_notifier(&exynos_reboot_nb);
 	if (err) {
