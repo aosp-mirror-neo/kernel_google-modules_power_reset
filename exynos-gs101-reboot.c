@@ -25,18 +25,20 @@
 #include <soc/google/acpm_ipc_ctrl.h>
 #endif
 #include <soc/google/exynos-el3_mon.h>
-#include <soc/google/debug-snapshot.h>
 #include "../../bms/google_bms.h"
 
 #define EXYNOS_PMU_SYSIP_DAT0		(0x0810)
 
 #define BMS_RSBM_VALID			BIT(31)
 
+#define DUMP_GPR_MODE			(0xDAB)
+
 static struct regmap *pmureg;
 static u32 warm_reboot_offset, warm_reboot_trigger;
 static u32 cold_reboot_offset, cold_reboot_trigger;
 static u32 reboot_cmd_offset;
 static u32 shutdown_offset, shutdown_trigger;
+static u32 dump_gpr_offset;
 static phys_addr_t pmu_alive_base;
 static bool rsbm_supported;
 static bool force_warm_reboot_on_thermal_shutdown;
@@ -143,8 +145,8 @@ static void exynos_reboot_parse(const char *cmd)
 			value = REBOOT_MODE_DMVERITY_CORRUPTED;
 		}  else if (!strcmp(cmd, "rescue")) {
 			value = REBOOT_MODE_RESCUE;
-		} else if (!strcmp(cmd, "shutdown-thermal") ||
-			   !strcmp(cmd, "shutdown,thermal")) {
+		} else if (!strncmp(cmd, "shutdown-thermal", strlen("shutdown-thermal")) ||
+			   !strncmp(cmd, "shutdown,thermal", strlen("shutdown,thermal"))) {
 			if (force_warm_reboot_on_thermal_shutdown)
 				force_warm_reboot = true;
 			value = REBOOT_MODE_SHUTDOWN_THERMAL;
@@ -200,9 +202,13 @@ static int exynos_restart_handler(struct notifier_block *this, unsigned long mod
 	/* Do S/W Reset */
 	pr_emerg("%s: Exynos SoC reset right now\n", __func__);
 
-	if (s2mpg10_get_rev_id() == S2MPG10_EVT0 ||
-	    !rsbm_supported || !dbg_snapshot_get_reboot_status() ||
-	    dbg_snapshot_get_panic_status() || dbg_snapshot_get_warm_status()) {
+	if (reboot_mode == REBOOT_WARM || reboot_mode == REBOOT_SOFT)
+		set_priv_reg(pmu_alive_base + dump_gpr_offset, DUMP_GPR_MODE);
+	else
+		set_priv_reg(pmu_alive_base + dump_gpr_offset, 0x0);
+
+	if (s2mpg10_get_rev_id() == S2MPG10_EVT0 || !rsbm_supported ||
+	    reboot_mode == REBOOT_WARM || reboot_mode == REBOOT_SOFT) {
 		set_priv_reg(pmu_alive_base + warm_reboot_offset, warm_reboot_trigger);
 	} else {
 		pr_emerg("Set PS_HOLD Low.\n");
@@ -274,6 +280,11 @@ static int exynos_reboot_probe(struct platform_device *pdev)
 	if (of_property_read_u32(np, "reboot-cmd-offset", &reboot_cmd_offset) < 0) {
 		dev_info(dev, "failed to find reboot-offset property, using default\n");
 		reboot_cmd_offset = EXYNOS_PMU_SYSIP_DAT0;
+	}
+
+	if (of_property_read_u32(np, "dump-gpr-offset", &dump_gpr_offset) < 0) {
+		dev_err(dev, "failed to find dump-gpr-offset property\n");
+		return -EINVAL;
 	}
 
 	force_warm_reboot_on_thermal_shutdown = of_property_read_bool(np,
