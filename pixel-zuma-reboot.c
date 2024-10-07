@@ -8,6 +8,7 @@
  *	   Youngmin Nam <youngmin.nam@samsung.com>
  */
 
+#include <linux/cleanup.h>
 #include <linux/delay.h>
 #include <linux/of.h>
 #include <linux/module.h>
@@ -138,7 +139,7 @@ static int pixel_reboot_probe(struct platform_device *pdev)
 	struct device *dev = &pdev->dev;
 	struct device_node *np = pdev->dev.of_node;
 	struct regmap *pmureg;
-	struct device_node *syscon_np;
+	struct device_node *syscon_np __free(device_node);
 	struct resource res;
 	int err;
 
