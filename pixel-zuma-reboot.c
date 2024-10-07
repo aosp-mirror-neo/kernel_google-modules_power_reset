@@ -142,16 +142,16 @@ static int pixel_reboot_probe(struct platform_device *pdev)
 	struct resource res;
 	int err;
 
-	pmureg = syscon_regmap_lookup_by_phandle(np, "syscon");
-	if (IS_ERR(pmureg)) {
-		dev_err(dev, "Fail to get regmap of PMU\n");
-		return PTR_ERR(pmureg);
-	}
-
 	syscon_np = of_parse_phandle(np, "syscon", 0);
 	if (!syscon_np) {
 		dev_err(dev, "syscon device node not found\n");
 		return -EINVAL;
+	}
+
+	pmureg = syscon_node_to_regmap(syscon_np);
+	if (IS_ERR(pmureg)) {
+		dev_err(dev, "Fail to get regmap of PMU\n");
+		return PTR_ERR(pmureg);
 	}
 
 	if (of_address_to_resource(syscon_np, 0, &res)) {
