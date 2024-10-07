@@ -212,7 +212,7 @@ static struct notifier_block pixel_restart_nb = {
 static int pixel_reboot_probe(struct platform_device *pdev)
 {
 	struct device *dev = &pdev->dev;
-	struct device_node *np = pdev->dev.of_node, *pp;
+	struct device_node *np = pdev->dev.of_node;
 	struct device_node *syscon_np __free(device_node);
 	struct resource res;
 	int err;
@@ -276,7 +276,7 @@ static int pixel_reboot_probe(struct platform_device *pdev)
 	np = of_find_node_by_path("/gpio_keys");
 	if (!np)
 		return -EINVAL;
-	for_each_child_of_node(np, pp) {
+	for_each_child_of_node_scoped(np, pp) {
 		if (!of_find_property(pp, "gpios", NULL))
 			continue;
 		of_property_read_u32(pp, "linux,code", &keycode);
