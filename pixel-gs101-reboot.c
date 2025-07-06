@@ -18,7 +18,7 @@
 #include <linux/of_address.h>
 #include <linux/regmap.h>
 #include <linux/mfd/syscon.h>
-#include <linux/mfd/samsung/s2mpg10.h>
+#include <linux/mfd/samsung/s2mpg10-local.h>
 #include <linux/platform_device.h>
 #include <linux/reboot.h>
 #if IS_ENABLED(CONFIG_GS_ACPM)
