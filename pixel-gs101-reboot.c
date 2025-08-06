@@ -279,16 +279,17 @@ static int pixel_reboot_probe(struct platform_device *pdev)
 	for_each_child_of_node_scoped(np, pp) {
 		if (!of_find_property(pp, "gpios", NULL))
 			continue;
-		of_property_read_u32(pp, "linux,code", &keycode);
 
-		if (keycode == KEY_POWER) {
+		err = of_property_read_u32(pp, "linux,code", &keycode);
+		if (err == 0 && keycode == KEY_POWER) {
 			power_gpio = devm_fwnode_gpiod_get_index(dev, of_fwnode_handle(pp),
 								 NULL, 0, GPIOD_IN |
 								 GPIOD_FLAGS_BIT_NONEXCLUSIVE,
 								 NULL);
 			if (IS_ERR(power_gpio)) {
 				dev_err(dev, "failed to get KEY_POWER gpio (%ld)\n",
-					 PTR_ERR(power_gpio));
+					PTR_ERR(power_gpio));
+				of_node_put(np);
 				return PTR_ERR(power_gpio);
 			}
 			break;
